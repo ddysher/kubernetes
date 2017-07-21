@@ -42,10 +42,16 @@ import (
 var podResources = []api.ResourceName{
 	api.ResourceCPU,
 	api.ResourceMemory,
+	api.ResourceStorageOverlay,
+	api.ResourceStorageScratch,
 	api.ResourceRequestsCPU,
 	api.ResourceRequestsMemory,
+	api.ResourceRequestsStorageOverlay,
+	api.ResourceRequestsStorageScratch,
 	api.ResourceLimitsCPU,
 	api.ResourceLimitsMemory,
+	api.ResourceLimitsStorageOverlay,
+	api.ResourceLimitsStorageScratch,
 	api.ResourcePods,
 }
 
@@ -120,6 +126,9 @@ func (p *podEvaluator) Constraints(required []api.ResourceName, item runtime.Obj
 	for i := range pod.Spec.InitContainers {
 		enforcePodContainerConstraints(&pod.Spec.InitContainers[i], requiredSet, missingSet)
 	}
+	for i := range pod.Spec.Volumes {
+		enforcePodVolumeConstraints(&pod.Spec.Volumes[i], missingSet)
+	}
 	if len(missingSet) == 0 {
 		return nil
 	}
@@ -173,6 +182,27 @@ func enforcePodContainerConstraints(container *api.Container, requiredSet, missi
 	}
 }
 
+// enforcePodVolumeConstraints checks for required resources that are not set on empty dir volume and
+// adds them to missingSet.
+func enforcePodVolumeConstraints(volume *api.Volume, missingSet sets.String) {
+	fmt.Printf("debug: %+v\n", volume.EmptyDir)
+	// if volume.EmptyDir == nil {
+	// 	return
+	// }
+	// if volume.EmptyDir.Medium != api.StorageMediumMemory && volume.EmptyDir.SizeLimit
+	// resourceList := api.ResourceList{
+	// 	api.ResourceStorageScratch:         volume.EmptyDir.SizeLimit,
+	// 	api.ResourceRequestsStorageScratch: volume.EmptyDir.SizeLimit,
+	// 	api.ResourceLimitsStorageScratch:   volume.EmptyDir.SizeLimit,
+	// }
+	// containerUsage := podUsageHelper(requests, limits)
+	// containerSet := quota.ToSet(quota.ResourceNames(containerUsage))
+	// if !containerSet.Equal(requiredSet) {
+	// 	difference := requiredSet.Difference(containerSet)
+	// 	missingSet.Insert(difference.List()...)
+	// }
+}
+
 // podUsageHelper can summarize the pod quota usage based on requests and limits
 func podUsageHelper(requests api.ResourceList, limits api.ResourceList) api.ResourceList {
 	result := api.ResourceList{}
@@ -190,6 +220,20 @@ func podUsageHelper(requests api.ResourceList, limits api.ResourceList) api.Reso
 	}
 	if limit, found := limits[api.ResourceMemory]; found {
 		result[api.ResourceLimitsMemory] = limit
+	}
+	if request, found := requests[api.ResourceStorageOverlay]; found {
+		result[api.ResourceStorageOverlay] = request
+		result[api.ResourceRequestsStorageOverlay] = request
+	}
+	if limit, found := limits[api.ResourceStorageOverlay]; found {
+		result[api.ResourceLimitsStorageOverlay] = limit
+	}
+	if request, found := requests[api.ResourceStorageScratch]; found {
+		result[api.ResourceStorageScratch] = request
+		result[api.ResourceRequestsStorageScratch] = request
+	}
+	if limit, found := limits[api.ResourceStorageScratch]; found {
+		result[api.ResourceLimitsStorageScratch] = limit
 	}
 	return result
 }
